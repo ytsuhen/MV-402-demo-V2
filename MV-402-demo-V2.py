@@ -4,6 +4,8 @@ import time
 import datetime
 import json
 import io
+import os
+import urllib.request
 
 import matplotlib
 matplotlib.use("Agg")
@@ -170,119 +172,14 @@ def build_radar_chart(icf_scores: dict) -> bytes:
 # ==========================================
 def build_pdf(pd_data: dict, score: float, status: str, M, S_rest, alpha,
               is_early_exit: bool, tdv_fail, audit_log: list) -> bytes:
-    buf = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buf, pagesize=A4,
-        leftMargin=2*cm, rightMargin=2*cm,
-        topMargin=2*cm, bottomMargin=2*cm
-    )
-
-    styles = getSampleStyleSheet()
-    style_title = ParagraphStyle("vtitle", parent=styles["Title"], fontSize=14, spaceAfter=4)
-    style_sub   = ParagraphStyle("vsub",   parent=styles["Normal"], fontSize=9, textColor=colors.grey)
-    style_h2    = ParagraphStyle("vh2",    parent=styles["Heading2"], fontSize=11, spaceBefore=10, spaceAfter=4)
-    style_body  = ParagraphStyle("vbody",  parent=styles["Normal"], fontSize=9, leading=13)
-    style_stamp = ParagraphStyle("vstamp", parent=styles["Normal"], fontSize=11, textColor=colors.red,
-                                 alignment=TA_CENTER, spaceAfter=6)
-
-    story = []
-
-    # Заголовок
-    story.append(Paragraph("ВІЙСЬКОВО-ЛІКАРСЬКА КОМІСІЯ", style_title))
-    story.append(Paragraph("Висновок CDS Rule Engine | Версія 2.0", style_sub))
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#444444")))
-    story.append(Spacer(1, 0.3*cm))
-
-    # Дані пацієнта
-    story.append(Paragraph("1. Дані пацієнта", style_h2))
-    pt_data = [
-        ["ПІБ:", pd_data.get("pib", "—")],
-        ["ID в ЕСОЗ:", pd_data.get("id", "—")],
-        ["Посада (ТДВ):", pd_data.get("prof", "—")],
-        ["Дата висновку:", datetime.datetime.now().strftime("%d.%m.%Y %H:%M")],
-    ]
-    t = Table(pt_data, colWidths=[4*cm, 12*cm])
-    t.setStyle(TableStyle([
-        ("FONTSIZE", (0,0), (-1,-1), 9),
-        ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#555555")),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 0.3*cm))
-
-    # Домени
-    story.append(Paragraph("2. Функціональні домени (ICF-маппінг)", style_h2))
-    domain_rows = [["Домен", "МКХ-10", "ICF", "ACHI", "Тяжкість"]]
-    for domain, score_val in pd_data.get("icf_scores", {}).items():
-        db = KNOWLEDGE_BASE.get(domain, {})
-        sev_label = [k for k, v in SEVERITY_MAP.items() if v == score_val]
-        sev_text = sev_label[0].split(" ")[-1] if sev_label else str(score_val)
-        domain_rows.append([domain, db.get("icd",""), db.get("icf",""), db.get("achi",""), sev_text])
-    dt = Table(domain_rows, colWidths=[2.5*cm, 4*cm, 2*cm, 5*cm, 2.5*cm])
-    dt.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#2d333b")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("FONTSIZE", (0,0), (-1,-1), 8),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#444444")),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.HexColor("#f8f8f8"), colors.white]),
-    ]))
-    story.append(dt)
-    story.append(Spacer(1, 0.3*cm))
-
-    # MCDA
-    story.append(Paragraph("3. MCDA Розрахунок", style_h2))
-    mcda_rows = [
-        ["Домінуючий тягар (M)", str(M)],
-        ["Фоновий тягар (S_rest)", str(S_rest)],
-        ["Запас міцності (α)", f"{int(alpha*100)}%"],
-        ["Підсумковий бал", str(score)],
-    ]
-    mt = Table(mcda_rows, colWidths=[8*cm, 8*cm])
-    mt.setStyle(TableStyle([
-        ("FONTSIZE", (0,0), (-1,-1), 9),
-        ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#dddddd")),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 4),
-        ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#555555")),
-    ]))
-    story.append(mt)
-    story.append(Spacer(1, 0.4*cm))
-
-    # Статус (штамп)
-    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#444444")))
-    story.append(Spacer(1, 0.3*cm))
-    if is_early_exit or tdv_fail:
-        story.append(Paragraph("◼ НЕПРИДАТНИЙ (РАННІЙ ВИХІД)", style_stamp))
-        if is_early_exit:
-            story.append(Paragraph("Причина: Знайдено кваліфікатор .3 (Важке порушення)", style_body))
-        if tdv_fail:
-            story.append(Paragraph(f"ТДВ причина: {tdv_fail}", style_body))
-    else:
-        color_status = colors.green if "Придатний" == status else colors.orange
-        st_style = ParagraphStyle("vstatus", parent=style_stamp, textColor=color_status)
-        story.append(Paragraph(f"◼ {status.upper()}", st_style))
-
-    story.append(Spacer(1, 0.5*cm))
-
-    # Аудит-лог
-    story.append(Paragraph("4. Аудит-лог сесії", style_h2))
-    audit_rows = [["Час", "Рівень", "Дія", "Деталь"]]
-    for entry in audit_log:
-        audit_rows.append([entry["ts"], entry["level"], entry["action"], entry["detail"]])
-    at = Table(audit_rows, colWidths=[1.5*cm, 1.5*cm, 5*cm, 8*cm])
-    at.setStyle(TableStyle([
-        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#2d333b")),
-        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-        ("FONTSIZE", (0,0), (-1,-1), 7),
-        ("GRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cccccc")),
-        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
-        ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.HexColor("#f8f8f8"), colors.white]),
-    ]))
-    story.append(at)
-
-    doc.build(story)
-    buf.seek(0)
-    return buf.read()
+    
+    # 1. Завантаження та реєстрація кириличного шрифту
+    font_path = "Roboto-Regular.ttf"
+    if not os.path.exists(font_path):
+        url = "https://github.com/googlefonts/roboto/raw/main/src/hinted/Roboto-Regular.ttf"
+        urllib.request.urlretrieve(url, font_path)
+        
+    pdfmetrics.registerFont(TTFont('Roboto', font_path))
 
 # ==========================================
 # БОКОВЕ МЕНЮ
