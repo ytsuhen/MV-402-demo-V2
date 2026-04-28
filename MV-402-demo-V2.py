@@ -58,38 +58,38 @@ KNOWLEDGE_BASE = {
     "Зір": {
         "icd": "H52.1 (Міопія)",
         "icf": "b210",
-        "achi": "11212-00 (Дослідження очного дна)",
-        "validation": "LOINC: 70914-7 (Гострота зору)"
+        "achi": "11212-00",
+        "validation": "LOINC: 70914-7"
     },
     "Серце": {
         "icd": "I11.9 (Гіпертензивна хвороба)",
         "icf": "b420",
-        "achi": "11700-00 (ЕКГ, 12 відведень)",
-        "validation": "SNOMED: 38341003 (Гіпертензивна хвороба серця)"
+        "achi": "11700-00",
+        "validation": "SNOMED: 38341003"
     },
     "Спина": {
         "icd": "M42.1 (Остеохондроз хребта)",
         "icf": "b710",
-        "achi": "90901-03 (МРТ хребта)",
-        "validation": "SNOMED: 282822008 (Протрузія диска)"
+        "achi": "90901-03",
+        "validation": "SNOMED: 282822008"
     },
     "Травлення": {
         "icd": "K29.3 (Хронічний гастрит)",
         "icf": "b515",
-        "achi": "30473-00 (Панендоскопія)",
-        "validation": "SNOMED: 8493009 (Хронічний гастрит)"
+        "achi": "30473-00",
+        "validation": "SNOMED: 8493009"
     },
     "Дихання": {
         "icd": "J45.9 (Астма, неуточнена)",
         "icf": "b440",
-        "achi": "11503-05 (Спірометрія)",
-        "validation": "LOINC: 20150-9 (ОФВ1/FEV1)"
+        "achi": "11503-05",
+        "validation": "LOINC: 20150-9"
     },
     "Слух": {
         "icd": "H90.3 (Нейросенсорна туговухість)",
         "icf": "b230",
-        "achi": "11309-00 (Аудіометрія)",
-        "validation": "LOINC: 89020-2 (Поріг чутності)"
+        "achi": "11309-00",
+        "validation": "LOINC: 89020-2"
     }
 }
 
@@ -375,21 +375,225 @@ elif st.session_state.step == 2:
     if st.session_state.route in [1, 2]:
         st.title("🧠 CDS Мапінг")
         with st.spinner("Синхронізація ЕСОЗ..."):
-            time.sleep(0.5)
+            time.sleep(0.8)
 
-        cols = st.columns(len(pd["icf_scores"]))
-        for idx, domain in enumerate(pd["icf_scores"].keys()):
+        # Build tree HTML for each domain
+        domains_data = []
+        for domain in pd["icf_scores"].keys():
             db = KNOWLEDGE_BASE[domain]
             sev_val = pd["icf_scores"][domain]
             severity_text = [k for k, v in SEVERITY_MAP.items() if v == sev_val][0].split(" ")[-1]
-            with cols[idx]:
-                st.code(
-                    f"[1. Діагноз] МКХ-10: {db['icd']}\n"
-                    f"[2. Функція] ICF: {db['icf']} ({severity_text})\n"
-                    f"[3. Доказ] ACHI: {db['achi']}\n"
-                    f"[4. Валідація] {db['validation']}",
-                    language="yaml"
-                )
+            sev_color = "#f85149" if sev_val == 10 else "#d29922" if sev_val == 3 else "#3fb950"
+            domains_data.append({
+                "domain": domain,
+                "icd": db["icd"],
+                "icf": db["icf"],
+                "sev": severity_text,
+                "sev_color": sev_color,
+                "achi": db["achi"],
+                "validation": db["validation"],
+            })
+
+        # Generate tree cards HTML
+        cards_html = ""
+        for i, d in enumerate(domains_data):
+            delay_base = i * 0.18
+            cards_html += f"""
+            <div class="tree-card" style="animation-delay:{delay_base:.2f}s">
+              <div class="card-title">{d['domain']}</div>
+
+              <div class="node icd-node" style="animation-delay:{delay_base+0.05:.2f}s">
+                <span class="node-label">ICD-10</span>
+                <span class="node-value">{d['icd']}</span>
+              </div>
+
+              <div class="connector-wrap">
+                <div class="connector-line" style="animation-delay:{delay_base+0.15:.2f}s"></div>
+                <div class="connector-arrow" style="animation-delay:{delay_base+0.2:.2f}s">▼</div>
+                <div class="connector-tag" style="animation-delay:{delay_base+0.18:.2f}s">TRIGGERS</div>
+              </div>
+
+              <div class="node icf-node" style="animation-delay:{delay_base+0.25:.2f}s">
+                <span class="node-label">ICF Core</span>
+                <span class="node-value">{d['icf']}</span>
+                <span class="sev-badge" style="background:{d['sev_color']}22;color:{d['sev_color']};border-color:{d['sev_color']}55">{d['sev']}</span>
+              </div>
+
+              <div class="connector-wrap">
+                <div class="connector-line" style="animation-delay:{delay_base+0.32:.2f}s"></div>
+                <div class="connector-arrow" style="animation-delay:{delay_base+0.37:.2f}s">▼</div>
+                <div class="connector-tag" style="animation-delay:{delay_base+0.35:.2f}s">TRIGGERS</div>
+              </div>
+
+              <div class="node achi-node" style="animation-delay:{delay_base+0.42:.2f}s">
+                <span class="node-label">ACHI</span>
+                <span class="node-value">{d['achi']}</span>
+              </div>
+
+              <div class="connector-wrap">
+                <div class="connector-line" style="animation-delay:{delay_base+0.5:.2f}s"></div>
+                <div class="connector-arrow" style="animation-delay:{delay_base+0.55:.2f}s">▼</div>
+                <div class="connector-tag" style="animation-delay:{delay_base+0.52:.2f}s">TRIGGERS</div>
+              </div>
+
+              <div class="node val-node" style="animation-delay:{delay_base+0.6:.2f}s">
+                <span class="node-label">VALIDATION</span>
+                <span class="node-value">{d['validation']}</span>
+              </div>
+
+              <div class="card-ok" style="animation-delay:{delay_base+0.75:.2f}s">✓ MAPPED</div>
+            </div>
+            """
+
+        html_tree = f"""
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@700;800&display=swap');
+
+          .tree-root {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            padding: 8px 0 20px 0;
+            font-family: 'JetBrains Mono', monospace;
+          }}
+
+          .tree-card {{
+            background: #0d1117;
+            border: 1px solid #21262d;
+            border-radius: 10px;
+            padding: 16px 14px 12px 14px;
+            min-width: 190px;
+            flex: 1 1 190px;
+            max-width: 240px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0;
+            opacity: 0;
+            transform: translateY(18px);
+            animation: fadeUp 0.45s cubic-bezier(.22,1,.36,1) forwards;
+            box-shadow: 0 0 0 0 #58a6ff00;
+            transition: box-shadow 0.3s, border-color 0.3s;
+          }}
+          .tree-card:hover {{
+            border-color: #388bfd55;
+            box-shadow: 0 0 18px 2px #388bfd18;
+          }}
+
+          @keyframes fadeUp {{
+            to {{ opacity:1; transform:translateY(0); }}
+          }}
+
+          .card-title {{
+            font-family: 'Syne', sans-serif;
+            font-size: 13px;
+            font-weight: 800;
+            color: #e6edf3;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+          }}
+
+          .node {{
+            width: 100%;
+            border-radius: 7px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            opacity: 0;
+            animation: fadeUp 0.35s cubic-bezier(.22,1,.36,1) forwards;
+          }}
+          .node-label {{
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+          }}
+          .node-value {{
+            font-size: 11px;
+            font-weight: 600;
+            word-break: break-all;
+          }}
+
+          .icd-node  {{ background:#161b22; border:1px solid #30363d; }}
+          .icd-node .node-label  {{ color:#58a6ff; }}
+          .icd-node .node-value  {{ color:#c9d1d9; }}
+
+          .icf-node  {{ background:#161b22; border:1px solid #30363d; }}
+          .icf-node .node-label  {{ color:#bc8cff; }}
+          .icf-node .node-value  {{ color:#c9d1d9; }}
+
+          .achi-node {{ background:#161b22; border:1px solid #30363d; }}
+          .achi-node .node-label {{ color:#ffa657; }}
+          .achi-node .node-value {{ color:#c9d1d9; }}
+
+          .val-node  {{ background:#161b22; border:1px solid #30363d; }}
+          .val-node .node-label  {{ color:#3fb950; }}
+          .val-node .node-value  {{ color:#c9d1d9; }}
+
+          .sev-badge {{
+            display:inline-block;
+            font-size: 8px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid;
+            margin-top: 2px;
+            letter-spacing: 0.05em;
+            width: fit-content;
+          }}
+
+          .connector-wrap {{
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            width: 100%;
+            gap: 0;
+          }}
+          .connector-line {{
+            width: 1px;
+            height: 10px;
+            background: linear-gradient(to bottom, #30363d, #58a6ff44);
+            opacity: 0;
+            animation: fadeUp 0.2s ease forwards;
+          }}
+          .connector-arrow {{
+            font-size: 8px;
+            color: #58a6ff;
+            opacity: 0;
+            animation: fadeUp 0.2s ease forwards;
+            line-height: 1;
+          }}
+          .connector-tag {{
+            font-size: 7px;
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            color: #8b949e;
+            opacity: 0;
+            animation: fadeUp 0.2s ease forwards;
+            margin: 1px 0 3px 0;
+          }}
+
+          .card-ok {{
+            margin-top: 10px;
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 0.12em;
+            color: #3fb950;
+            opacity: 0;
+            animation: fadeUp 0.3s ease forwards;
+          }}
+        </style>
+
+        <div class="tree-root">
+          {cards_html}
+        </div>
+        """
+
+        import streamlit.components.v1 as components
+        components.html(html_tree, height=460, scrolling=True)
 
         add_audit("Маппінг виконано", f"Доменів: {len(pd['icf_scores'])}", "INFO")
 
